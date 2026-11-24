@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Node / Vite
+node_modules/
+dist/
+
+# Local database files (added in a later stage)
+*.db
+*.sqlite3
+frontend/.tsupgrader/runtime-validation/standalone-result.json
+
+# Editors and operating systems
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
