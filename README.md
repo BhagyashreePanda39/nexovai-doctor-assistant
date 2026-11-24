@@ -102,7 +102,6 @@ nexovai-doctor-assistant/
 |   |-- .env.example
 |   |-- package.json
 |   `-- vite.config.js
-|-- .env.example
 |-- .gitignore
 |-- PROJECT_STATUS.md
 `-- README.md
@@ -124,21 +123,28 @@ Docker is not required. The application uses SQLite.
 
 ## Environment variables
 
-From the project root, copy the example and edit it locally:
+Create a `.env` file in the project root with your local credentials:
 
 ```powershell
-if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 notepad .env
 ```
 
-Set these values in the root `.env`:
+Example `.env` contents (replace with your own values):
+
+```ini
+ELEVENLABS_API_KEY=your_elevenlabs_api_key
+ELEVENLABS_VOICE_ID=your_elevenlabs_voice_id
+GOOGLE_API_KEY=your_google_api_key
+GEMINI_MODEL=gemini-3.5-flash-lite
+FRONTEND_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174
+```
 
 | Variable | Required for | Description |
 |---|---|---|
 | `ELEVENLABS_API_KEY` | Voice | ElevenLabs API credential |
-| `ELEVENLABS_VOICE_ID` | Voice | ElevenLabs voice identifier |
+| `ELEVENLABS_VOICE_ID` | Voice | ElevenLabs voice ID available to your API key/workspace |
 | `GOOGLE_API_KEY` | Voice | Google Gemini API credential |
-| `GEMINI_MODEL` | Optional | Gemini model override; default is configured in the backend |
+| `GEMINI_MODEL` | Optional | Gemini model override (backend defaults to `gemini-3.6-flash`; `gemini-3.5-flash-lite` can be used if `gemini-3.6-flash` hits free-tier quota) |
 | `FRONTEND_ORIGINS` | Optional | Comma-separated local frontend origins; defaults allow Vite ports 5173 and 5174 |
 
 The backend loads the project-root `.env` (not `backend/.env`). This version
@@ -154,7 +160,7 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 ```
 
 It sets `VITE_API_BASE_URL=http://127.0.0.1:8000`. Never place provider keys in
-the frontend `.env` or commit either `.env` file. `.env.example` contains
+the frontend `.env` or commit any `.env` file. `frontend/.env.example` contains
 placeholders only.
 
 ## Installation and startup
@@ -308,12 +314,12 @@ not verify external provider behavior.
 - There is no authentication or authorization for the dashboard or API. The
   appointments endpoint returns patient phone numbers; do not expose this
   service publicly or use real patient information.
-- A live browser attempt reached Connected and the Gemini request ran, but
-  ElevenLabs rejected the configured voice ID and returned no speech audio.
-  The browser emitted a transcript, but no controlled test phrase was used.
-  Select a voice available to the same ElevenLabs account/workspace as the API
-  key, then retry. TTS playback and full booking/cancellation behavior remain
-  unverified.
+- Live browser voice booking has been verified locally using ElevenLabs STT/TTS
+  and Gemini function calling (`gemini-3.5-flash-lite`) with SQLite
+  persistence. Make sure `ELEVENLABS_VOICE_ID` belongs to the same ElevenLabs
+  account/workspace as `ELEVENLABS_API_KEY`. Live voice cancellation and edge-case
+  scenarios beyond that run are currently verified by automated tool/service
+  tests rather than live microphone runs.
 - The demo has no TURN server configuration; WebRTC connectivity can vary
   across restrictive networks.
 - SQLite is suitable for the local single-instance demo, not a concurrent
