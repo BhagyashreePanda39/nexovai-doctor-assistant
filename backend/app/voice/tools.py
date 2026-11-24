@@ -1,6 +1,6 @@
 import re
 from collections.abc import Callable
-from datetime import date
+from datetime import date, time
 from typing import Any
 
 from fastapi import HTTPException
@@ -263,16 +263,13 @@ class AppointmentTools:
                 return
 
             target = (request.phone_number, doctor_id, slot_id)
-            required_text = (
-                slot.doctor.name,
-                slot.appointment_date.isoformat(),
-                slot.appointment_time.strftime("%H:%M"),
-            )
             if (
                 self._pending_booking == target
                 and _declined_details(
                     params.context,
-                    required_text=required_text,
+                    doctor_name=slot.doctor.name,
+                    appointment_date=slot.appointment_date,
+                    appointment_time=slot.appointment_time,
                     action_word="book",
                 )
             ):
@@ -289,7 +286,9 @@ class AppointmentTools:
 
             if self._pending_booking != target or not _confirmed_details(
                 params.context,
-                required_text=required_text,
+                doctor_name=slot.doctor.name,
+                appointment_date=slot.appointment_date,
+                appointment_time=slot.appointment_time,
                 action_word="book",
             ):
                 self._pending_booking = target
@@ -466,16 +465,13 @@ class AppointmentTools:
                 return
 
             target = (normalized_phone, appointment.id)
-            required_text = (
-                appointment.doctor.name,
-                appointment.appointment_date.isoformat(),
-                appointment.appointment_time.strftime("%H:%M"),
-            )
             if (
                 self._pending_cancellation == target
                 and _declined_details(
                     params.context,
-                    required_text=required_text,
+                    doctor_name=appointment.doctor.name,
+                    appointment_date=appointment.appointment_date,
+                    appointment_time=appointment.appointment_time,
                     action_word="cancel",
                 )
             ):
@@ -492,7 +488,9 @@ class AppointmentTools:
 
             if self._pending_cancellation != target or not _confirmed_details(
                 params.context,
-                required_text=required_text,
+                doctor_name=appointment.doctor.name,
+                appointment_date=appointment.appointment_date,
+                appointment_time=appointment.appointment_time,
                 action_word="cancel",
             ):
                 self._pending_cancellation = target
@@ -539,7 +537,7 @@ class AppointmentTools:
             return True
 
         if (
-            self._pending_phone == phone_number
+            self._pending_phone in (None, phone_number)
             and _confirmed_phone_exchange(context, phone_number)
         ):
             self._confirmed_phone = phone_number
@@ -649,10 +647,14 @@ def _confirmed_phone_exchange(context: LLMContext, phone_number: str) -> bool:
     )
 
 
-def _confirmed_details(
+def _details_exchange_matches(
     context: LLMContext,
-    required_text: tuple[str, ...],
+    *,
+    doctor_name: str,
+    appointment_date: date,
+    appointment_time: time,
     action_word: str,
+    user_matcher: Callable[[str], bool],
 ) -> bool:
     exchange = _latest_exchange(context)
     if exchange is None:
@@ -660,10 +662,78 @@ def _confirmed_details(
     assistant_text, user_text = exchange
     lower_text = assistant_text.casefold()
     return (
-        all(value.casefold() in lower_text for value in required_text)
+        doctor_name.casefold() in lower_text
+        and _date_mentioned(assistant_text, appointment_date)
+        and _time_mentioned(assistant_text, appointment_time)
         and action_word in lower_text
         and _asks_for_confirmation(assistant_text)
-        and _is_explicit_yes(user_text)
+        and user_matcher(user_text)
+    )
+
+
+def _date_mentioned(text: str, target_date: date) -> bool:
+    lower_text = text.casefold()
+    if target_date.isoformat() in lower_text:
+        return True
+
+    full_month = target_date.strftime("%B").casefold()
+    short_month = target_date.strftime("%b").casefold()
+    month_pattern = rf"(?:{re.escape(full_month)}|{re.escape(short_month)})"
+    day_pattern = rf"0?{target_date.day}(?:st|nd|rd|th)?"
+    spoken_match = re.search(
+        rf"\b{month_pattern}\s+{day_pattern}\b"
+        rf"|\b{day_pattern}\s+(?:of\s+)?{month_pattern}\b",
+        lower_text,
+    )
+    if not spoken_match:
+        return False
+
+    years = re.findall(r"\b(?:19|20)\d{2}\b", lower_text)
+    return not years or str(target_date.year) in years
+
+
+def _time_mentioned(text: str, target_time: time) -> bool:
+    lower_text = text.casefold()
+    hh_mm = target_time.strftime("%H:%M")
+    h_mm = f"{target_time.hour}:{target_time.minute:02d}"
+    wrong_meridiem = "pm|p\\.m\\." if target_time.hour < 12 else "am|a\\.m\\."
+    if re.search(
+        rf"(?<!\d)(?:{re.escape(hh_mm)}|{re.escape(h_mm)})"
+        rf"(?!\d)(?!\s*(?:{wrong_meridiem}))",
+        lower_text,
+    ):
+        return True
+
+    hour12 = target_time.hour % 12 or 12
+    meridiem = "am|a\\.m\\." if target_time.hour < 12 else "pm|p\\.m\\."
+    minute_part = (
+        "(?::00)?"
+        if target_time.minute == 0
+        else rf":{target_time.minute:02d}"
+    )
+    return bool(
+        re.search(
+            rf"(?<!\d)0?{hour12}{minute_part}\s*(?:{meridiem})(?![a-z])",
+            lower_text,
+        )
+    )
+
+
+def _confirmed_details(
+    context: LLMContext,
+    *,
+    doctor_name: str,
+    appointment_date: date,
+    appointment_time: time,
+    action_word: str,
+) -> bool:
+    return _details_exchange_matches(
+        context,
+        doctor_name=doctor_name,
+        appointment_date=appointment_date,
+        appointment_time=appointment_time,
+        action_word=action_word,
+        user_matcher=_is_explicit_yes,
     )
 
 
@@ -682,19 +752,19 @@ def _declined_phone_exchange(context: LLMContext, phone_number: str) -> bool:
 
 def _declined_details(
     context: LLMContext,
-    required_text: tuple[str, ...],
+    *,
+    doctor_name: str,
+    appointment_date: date,
+    appointment_time: time,
     action_word: str,
 ) -> bool:
-    exchange = _latest_exchange(context)
-    if exchange is None:
-        return False
-    assistant_text, user_text = exchange
-    lower_text = assistant_text.casefold()
-    return (
-        all(value.casefold() in lower_text for value in required_text)
-        and action_word in lower_text
-        and _asks_for_confirmation(assistant_text)
-        and _is_explicit_no(user_text)
+    return _details_exchange_matches(
+        context,
+        doctor_name=doctor_name,
+        appointment_date=appointment_date,
+        appointment_time=appointment_time,
+        action_word=action_word,
+        user_matcher=_is_explicit_no,
     )
 
 
@@ -709,6 +779,9 @@ def _asks_for_confirmation(text: str) -> bool:
             "should i",
             "shall i",
             "would you like",
+            "go ahead",
+            "proceed",
+            "do you want",
         )
     )
 
@@ -724,8 +797,18 @@ def _is_explicit_yes(text: str) -> bool:
     return normalized in {
         "yes",
         "yes please",
+        "yes please do it",
+        "yes do it",
+        "yes book it",
+        "yes cancel it",
+        "yes go ahead",
         "yes that is correct",
         "yes that is right",
+        "yes confirm",
+        "yes i confirm",
+        "yes sure",
+        "yes okay",
+        "yes ok",
         "yeah",
         "yeah please",
         "yep",
@@ -735,7 +818,11 @@ def _is_explicit_yes(text: str) -> bool:
         "confirmed",
         "i confirm",
         "please do",
+        "please do it",
         "go ahead",
+        "go ahead please",
+        "book it",
+        "cancel it",
         "sure",
         "okay",
         "ok",

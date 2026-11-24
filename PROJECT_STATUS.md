@@ -10,9 +10,10 @@ pipeline, ElevenLabs STT/TTS, Gemini function calling, and SQLite storage.
 
 90% — Core backend, database, dashboard, voice pipeline, and appointment tools
 are implemented. Backend and frontend tests, the production build, and the
-standalone runtime validation pass. Stage 10 remains **NOT READY** for sign-off:
-a successful provider-backed browser call and its connected controls have not
-been verified because provider credentials are absent locally.
+standalone runtime validation pass. Local startup and API checks also pass.
+Stage 10 remains **NOT READY** for sign-off: the browser connected to Pipecat,
+but ElevenLabs rejected the configured voice ID, so no successful spoken
+conversation has been verified.
 
 ## Completed stages
 
@@ -42,22 +43,22 @@ been verified because provider credentials are absent locally.
 - Stage 10 (partial): Added submission documentation and API integration
   coverage. Final checks pass for 23 backend tests, 5 frontend tests, the Vite
   production build, the standalone runtime plan (5/5), live API routes,
-  frontend-to-backend CORS, and SQLite integrity. Live provider-backed voice
-  testing and final submission sign-off remain pending.
+  frontend-to-backend CORS, and SQLite integrity. A live browser call reached
+  Connected; Gemini ran, but ElevenLabs TTS rejected the configured voice ID
+  as nonexistent. Spoken STT/TTS and final submission sign-off remain pending.
 
 ## Pending stages
 
-- Stage 6 (partial): Configure provider credentials and verify the nine
-  requested booking/cancellation scenarios through a real browser microphone
-  conversation. Tool/service/SQLite scenario tests have passed.
+- Stage 6 (partial): Verify the nine requested booking/cancellation scenarios
+  through a real browser microphone conversation after correcting the
+  ElevenLabs voice ID. Tool/service/SQLite scenario tests have passed.
 - Stage 8 (partial): Complete a successful browser-to-Pipecat-to-Gemini/
-  ElevenLabs call, verify playback and live transcript, then test mute and
-  disconnect while the voice provider credentials are configured.
+  ElevenLabs call, verify audio playback and live transcript, then test mute
+  and disconnect. The latest browser attempt failed at ElevenLabs TTS.
 - Stage 9 (partial): Verify the audio-level bars, mute/unmute, timer, and End
-  Call during a provider-connected browser session. The provider keys are not
-  configured locally, so only the disconnected/error and dialog open/close
-  states could be exercised.
-- Stage 10 (partial): Configure local voice credentials, verify a real browser
+  Call during a successful provider-connected browser session. This attempt
+  connected but ended when the configured ElevenLabs voice was rejected.
+- Stage 10 (partial): Correct the voice configuration, verify a full browser
   call and appointment flow, then complete final submission checks. The demo
   must not be described as fully tested or production-ready before that.
 
@@ -152,13 +153,12 @@ been verified because provider credentials are absent locally.
 
 ## Features not implemented or not verified
 
-- Full live microphone/STT/Gemini/TTS scenario verification; local provider
-  credentials are not configured. A previous browser connection attempt
-  reached `/api/offer`, which returned 503 because the provider settings are
-  absent; the UI displayed that configuration error.
-- A successful audio connection, assistant speech playback, connected-call
-  transcript, mute/unmute behavior, and elapsed timer could not be verified
-  without provider credentials.
+- Full live microphone/STT/Gemini/TTS scenario verification. The latest
+  browser attempt reached Connected and the Gemini request ran, but ElevenLabs
+  rejected the configured voice ID as nonexistent; no assistant audio was
+  produced. The browser emitted one user transcript, but it was not a
+  controlled test phrase, so transcription accuracy and turn-taking remain
+  unverified. Connected-call controls also remain unverified.
 - Provider-connected testing of the live audio-level bars and call controls.
 
 ## Known bugs
@@ -172,10 +172,14 @@ been verified because provider credentials are absent locally.
 
 ## Known limitations
 
-- Live voice testing requires local `ELEVENLABS_API_KEY`,
-  `ELEVENLABS_VOICE_ID`, and `GOOGLE_API_KEY` values in `.env`.
-- Provider credentials are currently absent from the local workspace. Do not
-  paste them into chat; configure them in the backend `.env` locally.
+- The application loads the project-root `.env` and currently expects
+  `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`, and `GOOGLE_API_KEY`.
+  `backend/.env` is absent, and `GEMINI_API_KEY` is not the variable this
+  version reads. The root file contains the settings expected by the app.
+- The latest live call was denied by ElevenLabs because the configured voice
+  ID is not available. Select a valid voice from the same ElevenLabs account
+  or workspace as the API key, update the local root `.env`, and restart
+  FastAPI. Never paste credentials into chat.
 - The frontend production build succeeds with a Vite warning that its main
   JavaScript bundle is 733.92 kB before gzip, above Vite's 500 kB advisory
   threshold.
@@ -186,28 +190,32 @@ been verified because provider credentials are absent locally.
 
 ## Current working status
 
-Stage 10 automated checks pass: 23 backend tests, 5 frontend tests, a
-production build, dependency consistency (`pip check`, `npm ls`), and the
-standalone runtime validation (5/5 assertions). Live probes returned HTTP 200
-for `/health`, doctors, availability, and appointments; the browser dashboard
-loaded four doctors and 36 available slots. CORS allows the Vite 5174 origin.
-SQLite reports `integrity_check=ok` with no foreign-key violations. Provider
-voice, connected mute/end, and real speech remain UNVERIFIED because local
-ElevenLabs/Gemini credentials are absent. Therefore the project is **NOT READY
-FOR FINAL SIGN-OFF**.
+On 2026-11-25 at 01:03, backend dependencies/imports and frontend dependencies
+were verified; no installs were needed. All 23 backend tests and 5 frontend tests
+passed, and the frontend production build passed with the existing large-chunk
+advisory. FastAPI `/health` and the Vite page returned 200; live doctor,
+availability, and appointment reads returned 200 (4 doctors, 36 slots, 0
+appointments). Booking, double-book rejection, ownership-checked cancellation,
+and slot release pass the isolated FastAPI route tests. `.env` paths are
+ignored by Git. The actual browser reached Connected and emitted a transcript,
+but ElevenLabs rejected the current voice ID and no assistant audio was
+produced. The transcription was not checked against a controlled phrase.
+`backend/.env` is absent; the app reads root `.env` and expects
+`GOOGLE_API_KEY`. Full voice and spoken appointment flows remain **NOT
+VERIFIED**, so the project is **NOT READY FOR FINAL SIGN-OFF**.
 
 ## Exact next steps
 
-1. Configure `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`, and `GOOGLE_API_KEY`
-   in the local root `.env`; do not share them in chat or commit them.
-2. Restart FastAPI and Vite; verify a real browser call, ElevenLabs STT/TTS,
-   Gemini response, live transcript/audio, timer, mute/unmute, and clean
-   disconnect.
-3. Exercise booking and cancellation through the live voice call; verify phone
-   number readback/confirmation, selected slot/action confirmation, and the
-   resulting dashboard/SQLite state.
+1. Replace `ELEVENLABS_VOICE_ID` in the project-root `.env` with an ID for a
+   voice available to the same ElevenLabs account/workspace as the API key.
+   The app currently reads `GOOGLE_API_KEY`; it does not read `GEMINI_API_KEY`
+   or `backend/.env`.
+2. Restart FastAPI and retry the browser call. Verify actual TTS playback and
+   speak a short test phrase to verify STT and transcript.
+3. Exercise booking and cancellation through the live call; verify number
+   readback/confirmation, action confirmation, dashboard refresh, and SQLite
+   state.
 4. Before sharing publicly, address the no-auth/phone-number privacy
-   limitation; do not use real patient information.
-5. Before pushing publicly, follow the GitHub and secret-check steps in the
-   Stage 10 handoff; prepare the honest demo video only after successful live
-   voice verification.
+   limitation; use mock data only.
+5. The local worktree currently has a user deletion of root `.env.example`;
+   it was preserved. Review/restore it only if you want that template back.

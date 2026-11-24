@@ -1,6 +1,6 @@
 # Runtime Validation Report
 
-**Generated**: 2026-11-24T23:25:00+05:30
+**Generated**: 2026-11-25T00:52:00+05:30
 **Target**: `E:\medivoice\nexovai-doctor-assistant`
 
 ## Summary
@@ -11,9 +11,9 @@
 | Backend tests | PASS | 0 | 23 tests across six unittest files, including FastAPI route integration and isolated SQLite service/tool scenarios. |
 | Frontend tests/build | PASS | 0 | Vitest: 5 passed. Vite production build succeeded; a chunk-size advisory remains. |
 | Standalone runtime validation | PASS | 0 | Five assertions passed: frontend build, tests, frontend HTTP 200, doctors API HTTP 200, and appointments API HTTP 200. |
-| Browser voice E2E | PARTIAL | — | Dashboard rendered four doctors and 36 slots. A prior connection attempt displayed the API's 503 missing-credentials message. Successful live audio/provider behavior remains unverified. |
+| Browser voice E2E | FAIL / PARTIAL | — | WebRTC connected and Gemini ran. The browser emitted one transcript, but ElevenLabs rejected the configured voice ID and produced no audio. Controlled STT accuracy, TTS playback, and voice booking remain unverified. |
 
-**Overall**: NOT READY FOR SIGN-OFF — backend and frontend automated checks pass, and the nine appointment scenarios pass at tool/service level. Successful live Gemini/STT/TTS conversation testing is blocked by missing local provider credentials.
+**Overall**: NOT READY FOR SIGN-OFF — backend and frontend checks pass, and the nine appointment scenarios pass at tool/service level. The live browser call connected, but the voice ID must be corrected before an end-to-end voice conversation can pass.
 
 ## Scenario Checklist
 
@@ -41,17 +41,18 @@ environment:
   node: AVAILABLE — v22.17.1
   playwright: AVAILABLE — shared VS Code Playwright browser used for browser validation
   infra-tier: FALLBACK(embedded/in-memory) — SQLite is the application's database; Docker is unavailable
-  browser-tier: PRIMARY(Playwright) — dashboard opened and rendered live API data
+  browser-tier: PRIMARY(Playwright) — dashboard opened; call reached Connected before TTS failure
 startup: PASS — FastAPI `/health`, doctors, availability, and appointments returned 200; Vite dashboard loaded
 integration: PASS — exit_code: 0; backend passed 23 tests; frontend passed 5 tests
 build: PASS — `npm run build`; Vite emitted a 733.92 kB main bundle advisory
 runtime-plan: PASS — standalone mode, 5 assertions passed, 0 failed
 dependencies: PASS — `pip check` found no broken requirements; `npm ls --depth=0` resolved declared packages
-security-config: PASS — no local `.env` files or likely hardcoded credentials detected; examples use placeholders
+security-config: PASS — root `.env` and `backend/.env` are ignored by Git; no secret values were printed
 sqlite: PASS — integrity check `ok`; zero foreign-key violations; 4 doctors, 36 slots, 0 appointments
 cors: PASS — `http://localhost:5174` is allowed
-e2e: PARTIAL — actual voice setup remains blocked by absent local provider credentials; a prior browser attempt displayed the API's 503 configuration detail
-overall: NOT READY FOR SIGN-OFF — live ElevenLabs STT/TTS and Gemini behavior are not verified
+configuration: PARTIAL — root `.env` exists and has variables required by this code; `backend/.env` is absent; code expects `GOOGLE_API_KEY`, not `GEMINI_API_KEY`
+e2e: FAIL/PARTIAL — WebRTC connected, Google LLM request ran, one transcript emitted, ElevenLabs rejected the configured voice ID; no TTS audio
+overall: NOT READY FOR SIGN-OFF — the assistant did not speak; user-spoken STT and full conversation are not verified
 ```
 
 Read-only live API probes returned 200 for `/health`, `/api/doctors`
@@ -61,10 +62,14 @@ appointments). The live dashboard displayed the same counts. SQLite
 violations. Tool/API tests use isolated in-memory databases and do not modify
 `backend/appointments.db`.
 
-No root, backend, or frontend `.env` file is present. The browser connection
-attempt returned HTTP 503 because `ELEVENLABS_API_KEY`,
-`ELEVENLABS_VOICE_ID`, and `GOOGLE_API_KEY` are not configured. No secret values
-were read or displayed.
+The project-root `.env` exists and the backend loaded its expected settings;
+`backend/.env` does not exist. `backend/app/main.py` loads the root `.env`, and
+`backend/app/voice/pipeline.py` expects `GOOGLE_API_KEY` (not
+`GEMINI_API_KEY`). No secret values were read or displayed. The latest browser
+attempt reached Connected and Gemini processed the greeting, but the
+ElevenLabs service rejected the configured voice ID as unavailable, so TTS
+produced no audio. One transcript was emitted, but no controlled phrase was
+used to verify STT accuracy.
 
 ## Fixes Made
 
@@ -83,7 +88,7 @@ were read or displayed.
 |---:|---|---|---|
 | 1 | High | Phone validation was generic for short numbers; invalid doctor lookup looked like a slot conflict; declines left confusing pending prompts. | Fixed and covered by tests. |
 | 2 | Medium | Frontend text said appointments could not be changed, and connection errors hid backend detail. | Fixed; browser shows actionable missing-key message. |
-| 3 | Blocker to live voice verification | Local ElevenLabs and Google credentials are not configured. | Unresolved environment prerequisite; add credentials locally, then rerun browser voice scenarios. |
+| 3 | Blocker to live voice verification | ElevenLabs rejected the configured voice ID as nonexistent/unavailable; no audio was returned. | Select a valid voice available in the same ElevenLabs account/workspace as the API key, update root `.env`, restart FastAPI, and retry. |
 | 4 | Medium | Dashboard/API have no authentication; appointment responses expose patient phone numbers. | Demo-only; use mock data and do not expose publicly. |
 | 5 | Low | Production Vite build succeeds but warns that the generated JavaScript chunk exceeds 500 kB (733.92 kB before gzip). | Not changed; not a functional blocker for the assignment demo. |
 | 6 | Review item | Earlier `npm audit` reported three dependency advisories (one moderate, two critical). | Not upgraded as part of this verification; review/resolve before public deployment. |

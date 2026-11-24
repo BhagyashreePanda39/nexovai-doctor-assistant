@@ -141,6 +141,11 @@ Set these values in the root `.env`:
 | `GEMINI_MODEL` | Optional | Gemini model override; default is configured in the backend |
 | `FRONTEND_ORIGINS` | Optional | Comma-separated local frontend origins; defaults allow Vite ports 5173 and 5174 |
 
+The backend loads the project-root `.env` (not `backend/.env`). This version
+expects `GOOGLE_API_KEY` for Gemini; `GEMINI_API_KEY` is not read. Keep using
+the variable names shown above unless the backend configuration code is
+changed.
+
 The dashboard's optional frontend setting is in `frontend/.env.example`:
 
 ```powershell
@@ -303,8 +308,12 @@ not verify external provider behavior.
 - There is no authentication or authorization for the dashboard or API. The
   appointments endpoint returns patient phone numbers; do not expose this
   service publicly or use real patient information.
-- Provider-backed voice behavior has not been verified in this workspace
-  without local ElevenLabs and Google credentials.
+- A live browser attempt reached Connected and the Gemini request ran, but
+  ElevenLabs rejected the configured voice ID and returned no speech audio.
+  The browser emitted a transcript, but no controlled test phrase was used.
+  Select a voice available to the same ElevenLabs account/workspace as the API
+  key, then retry. TTS playback and full booking/cancellation behavior remain
+  unverified.
 - The demo has no TURN server configuration; WebRTC connectivity can vary
   across restrictive networks.
 - SQLite is suitable for the local single-instance demo, not a concurrent

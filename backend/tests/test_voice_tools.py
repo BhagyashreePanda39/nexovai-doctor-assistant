@@ -196,6 +196,44 @@ class AppointmentToolsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.count_appointments(), 1)
         self.assertTrue(self.slot_is_booked(self.slot_id))
 
+    async def test_booking_accepts_spoken_date_and_natural_yes_phrases(self) -> None:
+        spoken_date = f"{self.appointment_date.strftime('%B')} {self.appointment_date.day}, {self.appointment_date.year}"
+        spoken_context = self.context(
+            ("user", f"My phone number is {PHONE_NUMBER}."),
+            (
+                "assistant",
+                f"I have your phone number as {PHONE_NUMBER}. Is that correct?",
+            ),
+            ("user", "Yes"),
+        )
+        initial = ToolParams(spoken_context)
+        await self.tools.book_appointment(initial, **self.booking_arguments())
+        self.assertEqual(
+            self.result(initial)["confirmation_required"],
+            "booking",
+        )
+
+        confirmed = ToolParams(
+            self.context(
+                ("user", f"My phone number is {PHONE_NUMBER}."),
+                (
+                    "assistant",
+                    f"I have your phone number as {PHONE_NUMBER}. Is that correct?",
+                ),
+                ("user", "Yes"),
+                (
+                    "assistant",
+                    f"You would like to book Dr. Test Rao on {spoken_date} at 9:00 AM. "
+                    "Shall I go ahead and book this for you?",
+                ),
+                ("user", "Yes, please do it"),
+            )
+        )
+        await self.tools.book_appointment(confirmed, **self.booking_arguments())
+        self.assertTrue(self.result(confirmed)["success"])
+        self.assertEqual(self.count_appointments(), 1)
+        self.assertTrue(self.slot_is_booked(self.slot_id))
+
     async def test_booking_rejects_number_not_spoken_by_the_user(self) -> None:
         params = ToolParams(
             self.context(
